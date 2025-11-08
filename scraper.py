@@ -2,6 +2,15 @@ import re
 from urllib.parse import urlparse, urljoin, urldefrag
 
 from bs4 import BeautifulSoup
+from collections import Counter
+from urllib.parse import urlparse, urljoin, urldefrag
+import atexit
+import json
+
+seen_urls = set()
+word_freq = Counter()
+longest_page = {"url": None, "word_count": 0}
+subdomain_counts = {}
 
 # domains we’re allowed to crawl
 ALLOWED_DOMAINS = (
@@ -21,19 +30,61 @@ TRAP_WORDS = [
     "ngs.ics",
     "wics.ics",
     "event",
+    "wp-content/uploads",
 ]
 
+def dump_stats():
+    with open("stats.json", "w") as f:
+        json.dump(
+            {
+                "unique_urls": len(seen_urls),
+                "longest_page": longest_page,
+                "word_freq": word_freq.most_common(200),
+                "subdomains": subdomain_counts,
+            },
+            f,
+            indent=2,
+        )
+
+atexit.register(dump_stats)
+
 def scraper(url, resp):
-        # Skip if we didn’t actually get a page
     if resp.status != 200 or resp.raw_response is None:
         return []
 
-    # Some cache error codes (6xx etc.) – just bail
-    if resp.status >= 600:
-        return []
+    raw = resp.raw_response
+
+    # normalize URL (remove fragment)
+    clean_url, _ = urldefrag(raw.url or url)
+    seen_urls.add(clean_url)
+
+    # parse HTML
+    content_type = raw.headers.get("Content-Type", "")
+    if "text/html" in content_type:
+        soup = BeautifulSoup(raw.content, "lxml")
+        for tag in soup(["script", "style", "noscript"]):
+            tag.extract()
+
+        text = soup.get_text(separator=" ")
+        tokens = re.findall(r"[a-zA-Z]+", text.lower())
+
+        # TODO: define a stopwords set somewhere near top
+        filtered = [t for t in tokens if t not in STOPWORDS and len(t) > 1]
+
+        num_words = len(filtered)
+        word_freq.update(filtered)
+
+        if num_words > longest_page["word_count"]:
+            longest_page["word_count"] = num_words
+            longest_page["url"] = clean_url
+
+        # subdomain counts under uci.edu
+        parsed = urlparse(clean_url)
+        host = (parsed.hostname or "").lower()
+        if host.endswith(".uci.edu"):
+            subdomain_counts[host] = subdomain_counts.get(host, 0) + 1
 
     links = extract_next_links(url, resp)
-    # Only keep links that pass our domain/extension/trap filters
     return [link for link in links if is_valid(link)]
 
 def extract_next_links(url, resp):
