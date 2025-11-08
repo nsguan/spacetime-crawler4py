@@ -1,11 +1,14 @@
 import re
+import atexit
+import json
+from collections import Counter
 from urllib.parse import urlparse, urljoin, urldefrag
 
 from bs4 import BeautifulSoup
-from collections import Counter
-from urllib.parse import urlparse, urljoin, urldefrag
-import atexit
-import json
+
+# ---------------------------------------------------
+# Global analytics state
+# ---------------------------------------------------
 
 seen_urls = set()
 word_freq = Counter()
@@ -20,18 +23,34 @@ ALLOWED_DOMAINS = (
     "stat.uci.edu",
 )
 
-# fill this with the trap words / patterns you got from Discord
+# trap words / patterns
 TRAP_WORDS = [
     "format=pdf",
     "action=download",
     "share=",
     "sort=",
     "view=all",
-    "ngs.ics",
-    "wics.ics",
-    "event",
-    "wp-content/uploads",
+    "ngs.ics",              # NGS trap
+    "wics.ics",             # WICS trap
+    "wp-content/uploads",   # lots of pdfs/media
 ]
+
+# Basic English stopwords – you can tweak this to match the list from the spec
+STOPWORDS = {
+    "a","about","above","after","again","against","all","am","an","and","any","are",
+    "as","at","be","because","been","before","being","below","between","both","but",
+    "by","could","did","do","does","doing","down","during","each","few","for","from",
+    "further","had","has","have","having","he","her","here","hers","herself","him",
+    "himself","his","how","i","if","in","into","is","it","its","itself","just",
+    "me","more","most","my","myself","no","nor","not","now","of","off","on","once",
+    "only","or","other","our","ours","ourselves","out","over","own","same","she",
+    "should","so","some","such","than","that","the","their","theirs","them",
+    "themselves","then","there","these","they","this","those","through","to","too",
+    "under","until","up","very","was","we","were","what","when","where","which",
+    "while","who","whom","why","will","with","you","your","yours","yourself",
+    "yourselves","support", "media", "home", "contact", "menu",
+    "login", "copyright", "cookie", "privacy"
+}
 
 def dump_stats():
     with open("stats.json", "w") as f:
@@ -48,6 +67,10 @@ def dump_stats():
 
 atexit.register(dump_stats)
 
+# ---------------------------------------------------
+# Scraper
+# ---------------------------------------------------
+
 def scraper(url, resp):
     if resp.status != 200 or resp.raw_response is None:
         return []
@@ -58,64 +81,57 @@ def scraper(url, resp):
     clean_url, _ = urldefrag(raw.url or url)
     seen_urls.add(clean_url)
 
-    # parse HTML
+    # parse HTML + analytics
     content_type = raw.headers.get("Content-Type", "")
     if "text/html" in content_type:
-        soup = BeautifulSoup(raw.content, "lxml")
-        for tag in soup(["script", "style", "noscript"]):
-            tag.extract()
+        try:
+            soup = BeautifulSoup(raw.content, "lxml")
+        except Exception:
+            soup = None
 
-        text = soup.get_text(separator=" ")
-        tokens = re.findall(r"[a-zA-Z]+", text.lower())
+        if soup is not None:
+            for tag in soup(["script", "style", "noscript"]):
+                tag.extract()
 
-        # TODO: define a stopwords set somewhere near top
-        filtered = [t for t in tokens if t not in STOPWORDS and len(t) > 1]
+            text = soup.get_text(separator=" ")
+            tokens = re.findall(r"[a-zA-Z]+", text.lower())
 
-        num_words = len(filtered)
-        word_freq.update(filtered)
+            filtered = [t for t in tokens if t not in STOPWORDS and len(t) > 1]
 
-        if num_words > longest_page["word_count"]:
-            longest_page["word_count"] = num_words
-            longest_page["url"] = clean_url
+            num_words = len(filtered)
+            word_freq.update(filtered)
 
-        # subdomain counts under uci.edu
-        parsed = urlparse(clean_url)
-        host = (parsed.hostname or "").lower()
-        if host.endswith(".uci.edu"):
-            subdomain_counts[host] = subdomain_counts.get(host, 0) + 1
+            if num_words > longest_page["word_count"]:
+                longest_page["word_count"] = num_words
+                longest_page["url"] = clean_url
+
+            # subdomain counts under uci.edu
+            parsed = urlparse(clean_url)
+            host = (parsed.hostname or "").lower()
+            if host.endswith(".uci.edu"):
+                subdomain_counts[host] = subdomain_counts.get(host, 0) + 1
 
     links = extract_next_links(url, resp)
     return [link for link in links if is_valid(link)]
 
+
 def extract_next_links(url, resp):
-    # Implementation required.
-    # url: the URL that was used to get the page
-    # resp.url: the actual url of the page
-    # resp.status: the status code returned by the server. 200 is OK, you got the page. Other numbers mean that there was some kind of problem.
-    # resp.error: when status is not 200, you can check the error here, if needed.
-    # resp.raw_response: this is where the page actually is. More specifically, the raw_response has two parts:
-    #         resp.raw_response.url: the url, again
-    #         resp.raw_response.content: the content of the page!
-    # Return a list with the hyperlinks (as strings) scrapped from resp.raw_response.content
-    # url: the URL that was used to get the page
-    # resp.url: the actual url of the page
+    # Return a list with the hyperlinks (as strings) scraped from the page
     links = []
 
     raw = resp.raw_response
     if raw is None:
         return links
 
-    # Only process HTML pages
     content_type = raw.headers.get("Content-Type", "")
     if "text/html" not in content_type:
         return links
 
     try:
-        soup = BeautifulSoup(raw.content, "lxml")  # or "html.parser"
+        soup = BeautifulSoup(raw.content, "lxml")
     except Exception:
         return links
 
-    # Remove script/style so they don’t clutter text later if you do analytics
     for tag in soup(["script", "style", "noscript"]):
         tag.extract()
 
@@ -123,20 +139,23 @@ def extract_next_links(url, resp):
 
     for a in soup.find_all("a", href=True):
         href = a.get("href")
+        if not href:
+            continue
 
-        # Build absolute URL (handles relative links)
         absolute = urljoin(base_url, href)
-
-        # Remove fragment (#section)
         absolute, _ = urldefrag(absolute)
 
-        # You can skip mailto:, javascript:, etc. here too if you want
+        # skip mailto: javascript: etc.
+        if absolute.startswith("mailto:") or absolute.startswith("javascript:"):
+            continue
+
         links.append(absolute)
 
     return links
 
+
 def is_valid(url):
-    # Decide whether to crawl this url or not. 
+    # Decide whether to crawl this url or not.
     try:
         parsed = urlparse(url)
 
@@ -167,7 +186,7 @@ def is_valid(url):
             if t in full:
                 return False
 
-        # File extensions to skip (your original regex)
+        # File extensions to skip
         if re.match(
             r".*\.(css|js|bmp|gif|jpe?g|ico"
             + r"|png|tiff?|mid|mp2|mp3|mp4"
