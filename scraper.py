@@ -75,12 +75,24 @@ STOPWORDS = {
     "when", "when's", "where", "where's", "which", "while", "who", "who's",
     "whom", "why", "why's", "will", "with", "won't", "would", "wouldn't", "you",
     "you'd", "you'll", "you're", "you've", "your", "yours", "yourself",
-    "yourselves",
+    "yourselves", "can", "may", "ago", "us", "use", "using",
+    # file / format / url junk
+    "pdf", "ppt", "html", "file", "bytes",
+    "http", "https", "www", "edu", "com", "org",
     # custom UI / site noise words
     "support", "media", "home", "contact", "menu", "login", "copyright",
     "cookie", "privacy", "wiki", "files", "tools", "png", "page", "manager",
     "upload", "services", "kb", "sitemap", "user", "webapps", "log", "recent",
     "changes", "root", "namespaces", "backlinks", "thumbnails", "jpg",
+    # infra / server noise
+    "tomcat", "mysql", "trac", "server", "automatic",
+    # navigation / template scaffolding
+    "index", "navigation", "profiles", "spotlights", "directory",
+    "resources", "site", "content",
+    # date/time shorthand
+    "jan", "feb", "mar", "apr", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
+    "pm",
+
 }
 
 def dump_stats():
