@@ -34,8 +34,6 @@ TRAP_WORDS = [
     "share=",
     "sort=",
     "view=all",
-    "ngs.ics",
-    "wics.ics",
     "wp-content/uploads",
     "doku.php",
     "do=diff",
@@ -45,6 +43,10 @@ TRAP_WORDS = [
     "do=media",
     "namespace=",
     "idx=",
+    "tribe-events",
+    "ical=",
+    "isg.ics.uci.edu/events/",
+    "~eppstein/pix", 
 ]
 
 # Basic English stopwords
@@ -89,11 +91,12 @@ def dump_stats():
             {
                 "unique_urls": len(seen_urls),
                 "longest_page": longest_page,
-                "word_freq": word_freq.most_common(200),
                 "subdomains": subdomain_counts,                
                 "run_start": START_TIME,
                 "run_end": end_time,
                 "elapsed_time": elapsed_hms,
+                "word_freq": word_freq.most_common(200),
+                
             },
             f,
             indent=2,
@@ -150,7 +153,7 @@ def scraper(url, resp):
     
     links = extract_next_links(url, resp)
 
-    if num_words < 50:
+    if num_words < 1:
     # low-information page: don’t expand it further
         return []
     return [link for link in links if is_valid(link)]
