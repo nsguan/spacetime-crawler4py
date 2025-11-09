@@ -89,12 +89,12 @@ def dump_stats():
     with open("stats.json", "w") as f:
         json.dump(
             {
-                "unique_urls": len(seen_urls),
-                "longest_page": longest_page,
-                "subdomains": subdomain_counts,                
                 "run_start": START_TIME,
                 "run_end": end_time,
                 "elapsed_time": elapsed_hms,
+                "unique_urls": len(seen_urls),
+                "longest_page": longest_page,
+                "subdomains": subdomain_counts,                
                 "word_freq": word_freq.most_common(200),
                 
             },
