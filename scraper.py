@@ -229,6 +229,10 @@ def is_valid(url):
         query = (parsed.query or "").lower()
         full = path + "?" + query
 
+        #wics.ics and isg.ics /events/
+        if hostname in {"wics.ics.uci.edu", "isg.ics.uci.edu"} and "/events/" in path:
+            return False
+        
         # Trap words / patterns (from class Discord)
         for t in TRAP_WORDS:
             if t in full:
