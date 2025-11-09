@@ -43,9 +43,13 @@ TRAP_WORDS = [
     "do=media",
     "namespace=",
     "idx=",
-    "tribe-events",
-    "ical=",
-    "isg.ics.uci.edu/events/",
+    # calendar / events traps (from ICS sites)
+    "/events/list/",         # events archive pagination
+    "tribe-bar-date=",       # date range param
+    "post_type=tribe_events",
+    "ical=",                 # calendar export links
+
+    # huge photo gallery
     "~eppstein/pix", 
 ]
 
