@@ -108,3 +108,11 @@ venv.bak/
 
 *.full.py
 *.shelve
+
+# local crawl analytics / logs
+stats.json
+stats_*.json
+crawl-mt.log
+crawl-mt-*.log
+frontier.shelve
+*.shelve
